@@ -3487,14 +3487,29 @@ void write39SF010A_GB() {
   writeByte_GB(0x5555, 0xF0);
   delay(10);
 
-  if (flashid != 0xBFB5) {
+  char buf[8];
+  if (flashid != 0xbfff) {
     print_Msg(F("Unknown Flash ID:"));
-    char buf[8];
     sprintf(buf, "%04x", flashid);
     println_Msg(buf);
   } else {
-    println_Msg(F("Successfully identified 39SF010A"));
+    println_Msg(F("identified 39SF010A (bfff)"));
   }
+  print_Msg(F("1010: "));
+  sprintf(buf, "%02x", readByte_GB(0x1010));
+  println_Msg(buf);
+  display_Update();
+
+  // program 0x1010
+  writeByte_GB(0x5555, 0xaa);
+  writeByte_GB(0x2aaa, 0x55);
+  writeByte_GB(0x5555, 0xa0);
+  writeByte_GB(0x1010, 0xff);
+  delay(10);
+  print_Msg(F("1010: "));
+  sprintf(buf, "%02x", readByte_GB(0x1010));
+  println_Msg(buf);
+
   print_STR(press_button_STR, 1);
   display_Update();
   wait();

@@ -29,7 +29,7 @@
     Choose your hardware version:
 */
 
-//#define HW5
+#define HW5
 //#define HW4
 //#define HW3
 //#define HW2
@@ -156,14 +156,14 @@
 /* [ Nintendo 64 -------------------------------------------------- ]
 */
 
-#define enable_N64
+//#define enable_N64
 
 /****/
 
 /* [ Nintendo Entertainment System/Family Computer ---------------- ]
 */
 
-#define enable_NES
+//#define enable_NES
 
 /****/
 
@@ -198,14 +198,14 @@
 /* [ Sega Master System/Mark III/Game Gear/SG-1000 ---------------- ]
 */
 
-#define enable_SMS
+//#define enable_SMS
 
 /****/
 
 /* [ Sega Mega Drive/Genesis -------------------------------------- ]
 */
 
-#define enable_MD
+//#define enable_MD
 
 /****/
 
@@ -233,7 +233,7 @@
 /* [ Super Nintendo ----------------------------------------------- ]
 */
 
-#define enable_SNES
+//#define enable_SNES
 
 /****/
 
@@ -402,7 +402,7 @@
 #define enable_neopixel
 #define enable_rotary
 //#define rotate_counter_clockwise
-#define clockgen_installed
+//#define clockgen_installed
 #define fastcrc
 #define ws_adapter_v2
 #endif

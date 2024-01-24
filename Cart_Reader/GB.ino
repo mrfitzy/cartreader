@@ -32,14 +32,15 @@ static const char GBMenuItem3[] PROGMEM = "Write Save";
 static const char* const menuOptionsGB[] PROGMEM = { GBMenuItem1, GBMenuItem2, GBMenuItem3, string_reset2 };
 
 // GB Flash items
-static const char GBFlashItem1[] PROGMEM = "29F Cart (MBC3)";
-static const char GBFlashItem2[] PROGMEM = "29F Cart (MBC5)";
-static const char GBFlashItem3[] PROGMEM = "29F Cart (CAM)";
-static const char GBFlashItem4[] PROGMEM = "CFI Cart";
-static const char GBFlashItem5[] PROGMEM = "CFI Cart and Save";
-static const char GBFlashItem6[] PROGMEM = "GB Smart";
-//static const char GBFlashItem7[] PROGMEM = "Reset"; (stored in common strings array)
-static const char* const menuOptionsGBFlash[] PROGMEM = { GBFlashItem1, GBFlashItem2, GBFlashItem3, GBFlashItem4, GBFlashItem5, GBFlashItem6, string_reset2 };
+static const char GBFlashItem1[] PROGMEM = "SST 39SF010A Cart";
+static const char GBFlashItem2[] PROGMEM = "29F Cart (MBC3)";
+static const char GBFlashItem3[] PROGMEM = "29F Cart (MBC5)";
+static const char GBFlashItem4[] PROGMEM = "29F Cart (CAM)";
+static const char GBFlashItem5[] PROGMEM = "CFI Cart";
+static const char GBFlashItem6[] PROGMEM = "CFI Cart and Save";
+static const char GBFlashItem7[] PROGMEM = "GB Smart";
+//static const char GBFlashItem8[] PROGMEM = "Reset"; (stored in common strings array)
+static const char* const menuOptionsGBFlash[] PROGMEM = { GBFlashItem1, GBFlashItem2, GBFlashItem3, GBFlashItem4, GBFlashItem5, GBFlashItem6, GBFlashItem7, string_reset2 };
 
 // Pelican Codebreaker, Brainboy, and Monster Brain Operation Menu
 static const char PelicanRead[] PROGMEM = "Read Device";
@@ -78,15 +79,25 @@ void gbxMenu() {
       break;
 
     case 2:
-      // create submenu with title and 7 options to choose from
+      // create submenu with title and 8 options to choose from
       unsigned char gbFlash;
       // Copy menuOptions out of progmem
-      convertPgm(menuOptionsGBFlash, 7);
-      gbFlash = question_box(F("Select type"), menuOptions, 7, 0);
+      convertPgm(menuOptionsGBFlash, 8);
+      gbFlash = question_box(F("Select type"), menuOptions, 8, 0);
 
       // wait for user choice to come back from the question box menu
       switch (gbFlash) {
         case 0:
+          // Flash 39SF010A
+          display_Clear();
+          display_Update();
+          setup_GB();
+          mode = mode_GB;
+
+          write39SF010A_GB();
+          break;
+
+        case 1:
           //Flash MBC3
           display_Clear();
           display_Update();
@@ -105,7 +116,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 1:
+        case 2:
           //Flash MBC5
           display_Clear();
           display_Update();
@@ -124,7 +135,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 2:
+        case 3:
           //Flash GB Camera
           display_Clear();
           display_Update();
@@ -168,7 +179,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 3:
+        case 4:
           // Flash CFI
           display_Clear();
           display_Update();
@@ -196,7 +207,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 4:
+        case 5:
           // Flash CFI and Save
           display_Clear();
           display_Update();
@@ -271,7 +282,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 5:
+        case 6:
           // Flash GB Smart
           display_Clear();
           display_Update();
@@ -279,7 +290,7 @@ void gbxMenu() {
           mode = mode_GB_GBSmart;
           break;
 
-        case 6:
+        case 7:
           resetArduino();
           break;
       }
@@ -3456,6 +3467,38 @@ void readGameshark_GB() {
 
   // Close the file:
   myFile.close();
+}
+
+void write39SF010A_GB() {
+  display_Clear();
+  println_Msg(F("hello from write39SF010A_GB!"));
+  display_Update();
+  // SST 39SF010A ID command sequence
+  writeByte_GB(0x5555, 0xaa);
+  writeByte_GB(0x2aaa, 0x55);
+  writeByte_GB(0x5555, 0x90);
+  delay(10);
+
+  // Read the two id bytes into a string
+  flashid = readByte_GB(0x0000) << 8;
+  flashid |= readByte_GB(0x0001);
+
+  // SST 39SF010 Flash ID Mode Exit
+  writeByte_GB(0x5555, 0xF0);
+  delay(10);
+
+  if (flashid != 0xBFB5) {
+    print_Msg(F("Unknown Flash ID:"));
+    char buf[8];
+    sprintf(buf, "%04x", flashid);
+    println_Msg(buf);
+  } else {
+    println_Msg(F("Successfully identified 39SF010A"));
+  }
+  print_STR(press_button_STR, 1);
+  display_Update();
+  wait();
+  mainMenu();
 }
 
 /****************************************************

@@ -94,7 +94,13 @@ void gbxMenu() {
           setup_GB();
           mode = mode_GB;
 
+          sd.chdir("/");
           write39SF010A_GB();
+
+          print_STR(press_button_STR, 1);
+          display_Update();
+          wait();
+          resetArduino();
           break;
 
         case 1:
@@ -3492,28 +3498,101 @@ void write39SF010A_GB() {
     print_Msg(F("Unknown Flash ID:"));
     sprintf(buf, "%04x", flashid);
     println_Msg(buf);
-  } else {
-    println_Msg(F("identified 39SF010A (bfff)"));
+    print_STR(press_button_STR, 1);
+    display_Update();
+    wait();
+    resetArduino();
   }
-  print_Msg(F("1010: "));
-  sprintf(buf, "%02x", readByte_GB(0x1010));
-  println_Msg(buf);
-  display_Update();
 
-  // program 0x1010
+  // Launch filebrowser
+  filePath[0] = '\0';
+  sd.chdir("/");
+  fileBrowser(F("Select file"));
+  display_Clear();
+
+  byte byte1;
+  bool toggle = true;
+
+  // Create filepath
+  sprintf(filePath, "%s/%s", filePath, fileName);
+
+  // Open file on sd card
+  myFile.open(filePath, O_READ);
+
+  // Erase flash
+  print_Msg(F("Erasing..."));
+  display_Update();
   writeByte_GB(0x5555, 0xaa);
   writeByte_GB(0x2aaa, 0x55);
-  writeByte_GB(0x5555, 0xa0);
-  writeByte_GB(0x1010, 0xff);
-  delay(10);
-  print_Msg(F("1010: "));
-  sprintf(buf, "%02x", readByte_GB(0x1010));
-  println_Msg(buf);
+  writeByte_GB(0x5555, 0x80);
+  writeByte_GB(0x5555, 0xaa);
+  writeByte_GB(0x2aaa, 0x55);
+  writeByte_GB(0x5555, 0x10);
+  delay(100);
+  println_Msg(F("done."));
 
-  print_STR(press_button_STR, 1);
+  // Blankcheck
+  print_Msg(F("Blankcheck..."));
   display_Update();
-  wait();
-  mainMenu();
+  for (word page = 0x0000; page < 0x7fff; page += 0x200) {
+    for (int b = 0; b < 0x200; b++) {
+      sdBuffer[b] = readByte_GB(page + b);
+    }
+    for (int b = 0; b < 0x200; b++) {
+      if (sdBuffer[b] != 0xff) {
+        sprintf(buf, "%04x", (page + b));
+        print_Msg(F("failed: "));
+        println_Msg(buf);
+        print_FatalError(F("Erase failed"));
+      }
+    }
+  }
+  println_Msg(F("done."));
+
+  // Initialize progress bar
+  uint32_t processedProgressBar = 0;
+  uint32_t totalProgressBar = 64;
+  draw_progressbar(0, totalProgressBar);
+
+  // Write flash
+  println_Msg(F("Writing flash..."));
+  display_Update();
+  for (word page = 0x0000; page < 0x7fff; page += 0x200) {
+    myFile.read(sdBuffer, 0x200);
+    for (int b = 0; b < 0x200; b++) {
+      writeByte_GB(0x5555, 0xaa);
+      writeByte_GB(0x2aaa, 0x55);
+      writeByte_GB(0x5555, 0xa0);
+      writeByte_GB(page + b, sdBuffer[b]);
+      delayMicroseconds(20);
+    }
+    draw_progressbar(processedProgressBar++, totalProgressBar);
+  }
+
+  // Verify
+  display_Clear();
+  print_STR(verifying_STR, 0);
+  display_Update();
+  myFile.seekSet(0);
+  writeErrors = 0;
+  for (word page = 0x0000; page < 0x7fff; page += 0x200) {
+    myFile.read(sdBuffer, 0x200);
+    for (int b = 0; b < 0x200; b++) {
+      if (readByte_GB(page + b) != sdBuffer[b])
+        writeErrors++;
+    }
+  }
+  myFile.close();
+  if (writeErrors == 0) {
+    println_Msg(F("OK!"));
+    println_Msg(F("Please turn off the power."));
+    display_Update();
+  } else {
+    println_Msg(F("Error"));
+    print_Msg(writeErrors);
+    print_STR(_bytes_STR, 1);
+    print_FatalError(did_not_verify_STR);
+  }
 }
 
 /****************************************************

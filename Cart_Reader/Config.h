@@ -44,7 +44,7 @@
     Enable this if you have the VSELECT module.
 */
 
-//#define ENABLE_VSELECT
+#define ENABLE_VSELECT
 
 /****/
 
@@ -205,7 +205,7 @@
 /* [ Sega Mega Drive/Genesis -------------------------------------- ]
 */
 
-//#define enable_MD
+#define enable_MD
 
 /****/
 

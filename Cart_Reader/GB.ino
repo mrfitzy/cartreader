@@ -3493,6 +3493,7 @@ void write39SF010A_GB() {
   writeByte_GB(0x5555, 0xF0);
   delay(10);
 
+  // N.B. flashid should be 0xbfb5 per datasheet
   char buf[8];
   if (flashid != 0xbfff) {
     print_Msg(F("Unknown Flash ID:"));

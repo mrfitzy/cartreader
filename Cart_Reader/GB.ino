@@ -32,15 +32,16 @@ static const char GBMenuItem3[] PROGMEM = "Write Save";
 static const char* const menuOptionsGB[] PROGMEM = { GBMenuItem1, GBMenuItem2, GBMenuItem3, string_reset2 };
 
 // GB Flash items
+static const char GBFlashItem0[] PROGMEM = "SST 39SF040 Cart";
 static const char GBFlashItem1[] PROGMEM = "SST 39SF010A Cart";
 static const char GBFlashItem2[] PROGMEM = "29F Cart (MBC3)";
 static const char GBFlashItem3[] PROGMEM = "29F Cart (MBC5)";
 static const char GBFlashItem4[] PROGMEM = "29F Cart (CAM)";
 static const char GBFlashItem5[] PROGMEM = "CFI Cart";
 static const char GBFlashItem6[] PROGMEM = "CFI Cart and Save";
-static const char GBFlashItem7[] PROGMEM = "GB Smart";
+//static const char GBFlashItem7[] PROGMEM = "GB Smart";
 //static const char GBFlashItem8[] PROGMEM = "Reset"; (stored in common strings array)
-static const char* const menuOptionsGBFlash[] PROGMEM = { GBFlashItem1, GBFlashItem2, GBFlashItem3, GBFlashItem4, GBFlashItem5, GBFlashItem6, GBFlashItem7, string_reset2 };
+static const char* const menuOptionsGBFlash[] PROGMEM = { GBFlashItem0, GBFlashItem1, GBFlashItem2, GBFlashItem3, GBFlashItem4, GBFlashItem5, GBFlashItem6, /*GBFlashItem7,*/ string_reset2 };
 
 // Pelican Codebreaker, Brainboy, and Monster Brain Operation Menu
 static const char PelicanRead[] PROGMEM = "Read Device";
@@ -88,6 +89,22 @@ void gbxMenu() {
       // wait for user choice to come back from the question box menu
       switch (gbFlash) {
         case 0:
+          // Flash 39SF040
+          display_Clear();
+          display_Update();
+          setup_GB();
+          mode = mode_GB;
+
+          sd.chdir("/");
+          write39SF040_GB();
+
+          print_STR(press_button_STR, 1);
+          display_Update();
+          wait();
+          resetArduino();
+          break;
+
+        case 1:
           // Flash 39SF010A
           display_Clear();
           display_Update();
@@ -103,7 +120,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 1:
+        case 2:
           //Flash MBC3
           display_Clear();
           display_Update();
@@ -122,7 +139,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 2:
+        case 3:
           //Flash MBC5
           display_Clear();
           display_Update();
@@ -141,7 +158,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 3:
+        case 4:
           //Flash GB Camera
           display_Clear();
           display_Update();
@@ -185,7 +202,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 4:
+        case 5:
           // Flash CFI
           display_Clear();
           display_Update();
@@ -213,7 +230,7 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 5:
+        case 6:
           // Flash CFI and Save
           display_Clear();
           display_Update();
@@ -288,13 +305,13 @@ void gbxMenu() {
           resetArduino();
           break;
 
-        case 6:
+        //case 7:
           // Flash GB Smart
-          display_Clear();
+          /*display_Clear();
           display_Update();
           setup_GBSmart();
           mode = mode_GB_GBSmart;
-          break;
+          break;*/
 
         case 7:
           resetArduino();
@@ -3498,10 +3515,10 @@ void write39SF010A_GB() {
   if (flashid != 0xbfff) {
     print_Msg(F("Unknown Flash ID:"));
     sprintf(buf, "%04x", flashid);
-    println_Msg(buf);
-    print_STR(press_button_STR, 1);
-    display_Update();
-    wait();
+  println_Msg(buf);
+  print_STR(press_button_STR, 1);
+  display_Update();
+  wait();
     resetArduino();
   }
 
@@ -3590,6 +3607,234 @@ void write39SF010A_GB() {
     display_Update();
   } else {
     println_Msg(F("Error"));
+    print_Msg(writeErrors);
+    print_STR(_bytes_STR, 1);
+    print_FatalError(did_not_verify_STR);
+  }
+}
+
+// copied comments:
+// A0-A13 directly connected to cart edge -> 16384(0x0-0x3FFF) bytes per bank -> 256(0x0-0xFF) banks
+// A14-A21 connected to MBC5
+void write39SF040_GB() {
+  display_Clear();
+  println_Msg(F("hello from write39SF040_GB!"));
+  display_Update();
+
+  // SST 39SF040 ID command sequence
+  writeByte_GB(0x555, 0xaa);
+  writeByte_GB(0x2aa, 0x55);
+  writeByte_GB(0x555, 0x90);
+  delay(10);
+
+  // Read the two id bytes into a string
+  flashid = readByte_GB(0x0000) << 8;
+  flashid |= readByte_GB(0x0001);
+
+  // SST 39SF040 Flash ID Mode Exit
+  writeByte_GB(0x555, 0xF0);
+  delay(10);
+
+  // N.B. flashid should be 0xbfb7 per datasheet
+  char buf[8];
+  if (flashid != 0xffff) {
+    print_Msg(F("Unknown Flash ID:"));
+    sprintf(buf, "%04x", flashid);
+    println_Msg(buf);
+    print_STR(press_button_STR, 1);
+    display_Update();
+    wait();
+    resetArduino();
+  }
+
+  // Launch filebrowser
+  filePath[0] = '\0';
+  sd.chdir("/");
+  fileBrowser(F("Select file (FC 39SF040)"));
+  display_Clear();
+
+  // Get rom size from file
+  sprintf(filePath, "%s/%s", filePath, fileName);
+  myFile.open(filePath, O_READ);
+  myFile.seekCur(0x147);
+  romType = myFile.read();
+  romSize = myFile.read();
+  myFile.seekSet(0);
+
+  // ROM banks
+  switch (romSize) {
+    case 0x00:
+      romBanks = 2;
+      break;
+    case 0x01:
+      romBanks = 4;
+      break;
+    case 0x02:
+      romBanks = 8;
+      break;
+    case 0x03:
+      romBanks = 16;
+      break;
+    case 0x04:
+      romBanks = 32;
+      break;
+    case 0x05:
+      romBanks = 64;
+      break;
+    case 0x06:
+      romBanks = 128;
+      break;
+    case 0x07:
+      romBanks = 256;
+      break;
+    default:
+      romBanks = 2;
+  }
+
+  // 4 Mbit ROM maximum supported
+  print_Msg(F("Banks: "));
+  print_Msg(romBanks);
+  println_Msg(F("/32"));
+  display_Update();
+  if (romSize > 0x04) {
+    print_FatalError(F("ROM too large"));
+  }
+
+  // Set ROM bank hi 0
+  writeByte_GB(0x3000, 0);
+  // Set ROM bank low 0
+  writeByte_GB(0x2000, 0);
+  delay(100);
+
+  // Reset flash
+  writeByte_GB(0x555, 0xf0);
+  delay(100);
+
+  // Erase flash
+  println_Msg(F("Erasing..."));
+  display_Update();
+  writeByte_GB(0x555, 0xaa);
+  writeByte_GB(0x2aa, 0x55);
+  writeByte_GB(0x555, 0x80);
+  writeByte_GB(0x555, 0xaa);
+  writeByte_GB(0x2aa, 0x55);
+  writeByte_GB(0x555, 0x10);
+  delay(100);
+  println_Msg(F("done."));
+
+  // Blankcheck
+  println_Msg(F("Blankcheck..."));
+  display_Update();
+  for (word currBank = 1; currBank < romBanks; currBank++) {
+    // Blink led
+    blinkLED();
+
+    // Set ROM bank
+    writeByte_GB(0x2000, currBank);
+
+    unsigned int currAddr = currBank != 1 ? 0x4000 : 0;
+    for (currAddr; currAddr < 0x7FFF; currAddr += 512) {
+      for (int currByte = 0; currByte < 512; currByte++) {
+        sdBuffer[currByte] = readByte_GB(currAddr + currByte);
+      }
+      for (int j = 0; j < 512; j++) {
+        if (sdBuffer[j] != 0xFF) {
+          print_Msg(F("Not empty: bank "));
+          print_Msg(currBank);
+          print_Msg(F(" addr "));
+          println_Msg(currAddr + j);
+          print_FatalError(F("Erase failed"));
+        }
+      }
+    }
+  }
+
+  println_Msg(F("Writing flash MBC5"));
+  display_Update();
+
+  // Initialize progress bar
+  uint32_t processedProgressBar = 0;
+  uint32_t totalProgressBar = (uint32_t)(romBanks)*16384;
+  draw_progressbar(0, totalProgressBar);
+
+  for (word currBank = 0; currBank < romBanks; currBank++) {
+    // Blink led
+    blinkLED();
+
+    // Set ROM bank
+    writeByte_GB(0x2000, currBank);
+    // 0x2A8000 fix
+    writeByte_GB(0x4000, 0x0);
+
+    unsigned int currAddr = currBank != 1 ? 0x4000 : 0;
+    for (currAddr; currAddr < 0x7FFF; currAddr += 512) {
+      myFile.read(sdBuffer, 512);
+
+      for (int currByte = 0; currByte < 512; currByte++) {
+        // Write command sequence
+        writeByte_GB(0x5555, 0xaa);
+        writeByte_GB(0x2aaa, 0x55);
+        writeByte_GB(0x5555, 0xa0);
+        // Write current byte
+        writeByte_GB(currAddr + currByte, sdBuffer[currByte]);
+
+        // Set OE/RD(PH6) LOW
+        PORTH &= ~(1 << 6);
+
+        // Busy check
+        while ((PINC & 0x80) != (sdBuffer[currByte] & 0x80)) {
+        }
+
+        // Switch OE/RD(PH6) to HIGH
+        PORTH |= (1 << 6);
+      }
+      processedProgressBar += 512;
+      draw_progressbar(processedProgressBar, totalProgressBar);
+    }
+  }
+
+  print_STR(verifying_STR, 0);
+  display_Update();
+
+  // Go back to file beginning
+  myFile.seekSet(0);
+  writeErrors = 0;
+
+  // Verify flashrom
+  word romAddress = 0;
+
+  // Read number of banks and switch banks
+  for (word bank = 1; bank < romBanks; bank++) {
+    // Set ROM bank
+    writeByte_GB(0x2000, bank);
+
+    if (bank > 1) {
+      romAddress = 0x4000;
+    }
+    // Blink led
+    blinkLED();
+
+    // Read up to 7FFF per bank
+    while (romAddress <= 0x7FFF) {
+      // Fill sdBuffer
+      myFile.read(sdBuffer, 512);
+      // Compare
+      for (int i = 0; i < 512; i++) {
+        if (readByte_GB(romAddress + i) != sdBuffer[i]) {
+          writeErrors++;
+        }
+      }
+      romAddress += 512;
+    }
+  }
+  // Close the file:
+  myFile.close();
+
+  if (writeErrors == 0) {
+    println_Msg(F("OK!"));
+    display_Update();
+  } else {
+    println_Msg(F("Error "));
     print_Msg(writeErrors);
     print_STR(_bytes_STR, 1);
     print_FatalError(did_not_verify_STR);

@@ -53,7 +53,7 @@
     automatically be enabled if you selected HW2 or newer above.
 */
 
-//#define clockgen_installed
+#define clockgen_installed
 
 /****/
 
@@ -62,7 +62,7 @@
     type later in this file.
 */
 
-//#define RTC_installed
+#define RTC_installed
 
 /****/
 

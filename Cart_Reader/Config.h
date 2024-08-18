@@ -182,7 +182,7 @@
 /* [ Flash Repros (all systems, SNES repro also needs FLASH8)------ ]
 */
 
-//#define ENABLE_FLASH 
+#define ENABLE_FLASH
 
 /****/
 

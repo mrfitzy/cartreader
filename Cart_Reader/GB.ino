@@ -133,7 +133,7 @@ void gbxMenu() {
           display_Clear();
           display_Update();
           setup_GB();
-          mode = mode_GB;
+          mode = CORE_GB;
 
           sd.chdir("/");
           write39SF010A_GB();
@@ -3310,7 +3310,7 @@ void write39SF010A_GB() {
   // Launch filebrowser
   filePath[0] = '\0';
   sd.chdir("/");
-  fileBrowser(F("Select file"));
+  fileBrowser(FS(FSTRING_SELECT_FILE));
   display_Clear();
 
   byte byte1;

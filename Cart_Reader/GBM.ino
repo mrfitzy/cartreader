@@ -1,7 +1,7 @@
 //******************************************
 // GB MEMORY MODULE
 //******************************************
-#ifdef enable_GBX
+#ifdef ENABLE_GBX
 
 /******************************************
   Menu
@@ -25,12 +25,14 @@ void gbmMenu() {
 
   // wait for user choice to come back from the question box menu
   switch (mainMenu) {
+#if defined(ENABLE_FLASH)
     // Read Flash ID
     case 0:
       // Clear screen
       display_Clear();
       readFlashID_GBM();
       break;
+#endif
 
     // Read Flash
     case 1:
@@ -62,6 +64,7 @@ void gbmMenu() {
       readROM_GBM(64);
       break;
 
+#if defined(ENABLE_FLASH)
     // Erase Flash
     case 2:
       // Clear screen
@@ -86,7 +89,7 @@ void gbmMenu() {
       // Clear screen
       display_Clear();
       if (blankcheckFlash_GBM()) {
-        println_Msg(F("OK"));
+        println_Msg(FS(FSTRING_OK));
         display_Update();
       } else {
         println_Msg(F("ERROR"));
@@ -162,7 +165,7 @@ void gbmMenu() {
       // Erase mapping
       eraseMapping_GBM();
       if (blankcheckMapping_GBM()) {
-        println_Msg(F("OK"));
+        println_Msg(FS(FSTRING_OK));
         display_Update();
       } else {
         print_Error(F("Erasing failed"));
@@ -172,8 +175,12 @@ void gbmMenu() {
       // Write mapping
       writeMapping_GBM();
       break;
+#endif
+
+    default:
+      print_MissingModule();  // does not return
   }
-  println_Msg(F(""));
+  println_Msg(FS(FSTRING_EMPTY));
   // Prints string out of the common strings array either with or without newline
   print_STR(press_button_STR, 1);
   display_Update();
@@ -447,6 +454,7 @@ void send_GBM(byte myCommand) {
   }
 }
 
+#if defined(ENABLE_FLASH)
 void send_GBM(byte myCommand, word myAddress, byte myData) {
   byte myAddrLow = myAddress & 0xFF;
   byte myAddrHigh = (myAddress >> 8) & 0xFF;
@@ -688,7 +696,7 @@ void writeFlash_GBM() {
     myFile.close();
     print_STR(done_STR, 1);
   } else {
-    print_Error(F("Can't open file"));
+    print_Error(open_file_STR);
   }
 }
 
@@ -902,10 +910,10 @@ void writeMapping_GBM() {
     myFile.close();
     print_STR(done_STR, 1);
   } else {
-    print_Error(F("Can't open file"));
+    print_Error(open_file_STR);
   }
 }
-
+#endif
 #endif
 
 //******************************************

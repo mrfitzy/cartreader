@@ -36,3 +36,4 @@ fp-info-cache
 
 # ODS files
 .~lock*
+/.vs

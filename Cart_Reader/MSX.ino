@@ -1,7 +1,7 @@
 //******************************************
 // MSX COMPUTER MODULE
 //******************************************
-#ifdef enable_MSX
+#ifdef ENABLE_MSX
 // MSX
 // Cartridge Pinout
 // 50P 2.54mm pitch connector
@@ -87,6 +87,7 @@ static const byte PROGMEM msxmapsize[] = {
   11, 0, 4, 2, 2,  // PAC 0K/FM-PAC 64K                     [sram r/w] 8K
   12, 7, 7, 0, 0,  // R-Type 384K
   13, 5, 5, 0, 0,  // Super Lode Runner (Irem) 128K
+  14, 2, 3, 0, 0,  // Hudson Soft Bee Pack
 };
 
 // MSX1 = 8,16,32,128,256
@@ -99,17 +100,14 @@ byte MSXRAM[] = { 0, 2, 8, 16, 32 };
 byte msxramlo = 0;  // Lowest Entry
 byte msxramhi = 4;  // Highest Entry
 
-byte msxmapcount = 14;  // (sizeof(mapsize)/sizeof(mapsize[0])) / 5;
+byte msxmapcount = 15;  // (sizeof(mapsize)/sizeof(mapsize[0])) / 5;
 boolean msxmapfound = false;
 byte msxmapselect;
 int msxindex;
 
 byte msxmapper;
-byte newmsxmapper;
 byte msxsize;
-byte newmsxsize;
 byte msxramsize;
-byte newmsxramsize;
 uint8_t msxbanks;
 byte chipselect;
 
@@ -126,11 +124,10 @@ boolean srambit7 = false;
 //  MENU
 //******************************************
 // Base Menu
-static const char msxMenuItem1[] PROGMEM = "Select Cart";
 static const char msxMenuItem2[] PROGMEM = "Read Cart";
 static const char msxMenuItem3[] PROGMEM = "Set Mapper + Size";
 static const char msxMenuItem4[] PROGMEM = "Write SRAM";
-static const char* const menuOptionsMSX[] PROGMEM = { msxMenuItem1, msxMenuItem2, msxMenuItem3, msxMenuItem4, string_reset2 };
+static const char* const menuOptionsMSX[] PROGMEM = { FSTRING_SELECT_CART, msxMenuItem2, msxMenuItem3, msxMenuItem4, FSTRING_RESET };
 
 void msxMenu() {
   convertPgm(menuOptionsMSX, 5);
@@ -140,7 +137,6 @@ void msxMenu() {
     case 0:
       // Select Cart
       setCart_MSX();
-      wait();
       setup_MSX();
       break;
 
@@ -163,7 +159,7 @@ void msxMenu() {
     case 3:
       // Write RAM
       writeRAM_MSX();
-      println_Msg(F(""));
+      println_Msg(FS(FSTRING_EMPTY));
       // Prints string out of the common strings array either with or without newline
       print_STR(press_button_STR, 1);
       display_Update();
@@ -223,7 +219,7 @@ void setup_MSX() {
   checkStatus_MSX();
   strcpy(romName, "MSX");
 
-  mode = mode_MSX;
+  mode = CORE_MSX;
 }
 
 //******************************************
@@ -296,23 +292,6 @@ void writeData_MSX(uint16_t addr, uint8_t data) {
 }
 
 //******************************************
-// POWER
-//******************************************
-#ifndef enable_NES
-int int_pow(int base, int exp)  // Power for int
-{
-  int result = 1;
-  while (exp) {
-    if (exp & 1)
-      result *= base;
-    exp /= 2;
-    base *= base;
-  }
-  return result;
-}
-#endif
-
-//******************************************
 // CS CODE
 //******************************************
 void setCS()  // Set CS Line
@@ -365,28 +344,7 @@ void readROM_MSX() {
     println_Msg(F("ROM SIZE 0K"));
     display_Update();
   } else {
-    strcpy(fileName, romName);
-    strcat(fileName, ".bin");
-
-    // create a new folder for storing rom file
-    EEPROM_readAnything(0, foldern);
-    sprintf(folder, "MSX/ROM/%d", foldern);
-    sd.mkdir(folder, true);
-    sd.chdir(folder);
-
-    display_Clear();
-    print_STR(saving_to_STR, 0);
-    print_Msg(folder);
-    println_Msg(F("/..."));
-    display_Update();
-
-    // open file on sdcard
-    if (!myFile.open(fileName, O_RDWR | O_CREAT))
-      print_FatalError(sd_error_STR);
-
-    // write new folder number back to EEPROM
-    foldern++;
-    EEPROM_writeAnything(0, foldern);
+    createFolderAndOpenFile("MSX", "ROM", romName, "bin");
 
     switch (msxmapper) {
       case 0:  // No Mapper
@@ -443,7 +401,7 @@ void readROM_MSX() {
         CS2_DISABLE;
         break;
 
-      case 4:                             // Game Master 2 (128K)
+      case 4:  // Game Master 2 (128K)
         readSegment_MSX(0x4000, 0x6000);  // 8K Fixed Bank 0
         writeData_MSX(0x6000, 1);         // Set Bank 1 for subsequent reads
         readSegment_MSX(0x6000, 0x8000);  // 8K Init Bank 1
@@ -493,7 +451,7 @@ void readROM_MSX() {
         CS2_DISABLE;
         break;
 
-      case 8:                             // Konami MegaROM without SCC
+      case 8:  // Konami MegaROM without SCC
         readSegment_MSX(0x4000, 0x6000);  // 8K Fixed Bank 0
         readSegment_MSX(0x6000, 0x8000);  // 8K Init Bank 1
         msxbanks = int_pow(2, msxsize - 1);
@@ -557,13 +515,23 @@ void readROM_MSX() {
         CS2_DISABLE;
         MERQ_DISABLE;
         break;
+
+      case 14: // Hudson Soft Bee Pack (16K/32K)
+        CS1_ENABLE;
+        readSegment_MSX(0x4000, 0x8000); // 16K Bank 0
+        CS1_DISABLE;
+        if (msxsize == 3) { // 32K
+          CS2_ENABLE;
+          readSegment_MSX(0x8000, 0xC000); // +16K Bank 1
+          CS2_DISABLE;
+        }
+        break;
     }
     myFile.close();
 
-    unsigned long crcsize = MSX[msxsize] * 0x400;
-    calcCRC(fileName, crcsize, NULL, 0);
+    printCRC(fileName, NULL, 0);
 
-    println_Msg(F(""));
+    println_Msg(FS(FSTRING_EMPTY));
     // Prints string out of the common strings array either with or without newline
     print_STR(press_button_STR, 1);
     display_Update();
@@ -662,7 +630,7 @@ void readRAM_MSX() {
         writeData_MSX(0x7000, 0);  // SRAM Disable
         break;
 
-      case 2:                               // ASCII16 (2K/8K)
+      case 2:  // ASCII16 (2K/8K)
         writeData_MSX(0x7000, 0x10);        // Bit 4 Enable
         readSegment_MSX(0x8000, 0x8800);    // 2K - Hydlide 2 & Daisenryaku (2K)
         if (msxramsize == 2)                // A-Train (8K)
@@ -670,7 +638,7 @@ void readRAM_MSX() {
         writeData_MSX(0x7000, 0);           // SRAM Disable
         break;
 
-      case 4:                             // Game Master 2 (8K)
+      case 4:  // Game Master 2 (8K)
         writeData_MSX(0xA000, 0x10);      // Bit 4 Enable, Bit 5 SRAM Segment 0
         readSegment_MSX(0xB000, 0xC000);  // 4K
         writeData_MSX(0xA000, 0x30);      // Bit 4 Enable, Bit 5 SRAM Segment 1
@@ -711,7 +679,7 @@ void readRAM_MSX() {
         writeData_MSX(0x7000, 0);  // SRAM Disable
         break;
 
-      case 11:                            // PAC/FM-PAC (8K)
+      case 11:  // PAC/FM-PAC (8K)
         writeData_MSX(0x5FFE, 0x4D);      // SRAM Enable Step 1
         writeData_MSX(0x5FFF, 0x69);      // SRAM Enable Step 2
         readSegment_MSX(0x4000, 0x6000);  // 8K
@@ -720,10 +688,9 @@ void readRAM_MSX() {
     }
     myFile.close();
 
-    unsigned long crcsize = MSX[msxramsize] * 0x400;
-    calcCRC(fileName, crcsize, NULL, 0);
+    printCRC(fileName, NULL, 0);
 
-    println_Msg(F(""));
+    println_Msg(FS(FSTRING_EMPTY));
     // Prints string out of the common strings array either with or without newline
     print_STR(press_button_STR, 1);
     display_Update();
@@ -753,7 +720,7 @@ void writeRAM_MSX() {
     if (myFile.open(filePath, O_READ)) {
 
       switch (msxmapper) {
-        case 1:                                                                                    // ASCII8 (2K/8K)
+        case 1:  // ASCII8 (2K/8K)
           for (word address = 0x0; address < (0x800 * msxramsize * msxramsize); address += 512) {  // 2K/8K
             if (msxramsize == 1)
               writeData_MSX(0x7000, 0x10);  // Bit 4
@@ -767,8 +734,8 @@ void writeRAM_MSX() {
           writeData_MSX(0x7000, 0);  // SRAM Disable
           break;
 
-        case 2:                                                                                    // ASCII16 (2K/8K)
-          writeData_MSX(0x7000, 0x10);                                                             // Bit 4 Enable
+        case 2:  // ASCII16 (2K/8K)
+          writeData_MSX(0x7000, 0x10);  // Bit 4 Enable
           for (word address = 0x0; address < (0x800 * msxramsize * msxramsize); address += 512) {  // 2K/8K
             myFile.read(sdBuffer, 512);
             for (int x = 0; x < 512; x++) {
@@ -780,7 +747,7 @@ void writeRAM_MSX() {
 
         case 4:  // Game Master 2 (8K)
           for (int y = 0; y < 2; y++) {
-            writeData_MSX(0xA000, 0x10 + (y * 0x20));                     // Bit 4 Enable, Bit 5 SRAM Segment 0/1
+            writeData_MSX(0xA000, 0x10 + (y * 0x20));  // Bit 4 Enable, Bit 5 SRAM Segment 0/1
             for (word address = 0x0; address < 0x1000; address += 512) {  // 4K
               myFile.read(sdBuffer, 512);
               for (int x = 0; x < 512; x++) {
@@ -793,7 +760,7 @@ void writeRAM_MSX() {
 
         case 5:  // HAL Note (16K)
           MERQ_ENABLE;
-          writeData_MSX(0x4FFF, 0x80);                                // Bit 7 Enable
+          writeData_MSX(0x4FFF, 0x80);  // Bit 7 Enable
           for (word address = 0; address < 0x4000; address += 512) {  // 16K
             myFile.read(sdBuffer, 512);
             for (int x = 0; x < 512; x++) {
@@ -809,7 +776,7 @@ void writeRAM_MSX() {
           if (srambit6)
             writeData_MSX(0x7000, 0xC0);  // Bit 6 + Bit 7 Enable
           else
-            writeData_MSX(0x7000, 0xA0);                                // Bit 5 + Bit 7 Enable
+            writeData_MSX(0x7000, 0xA0);  // Bit 5 + Bit 7 Enable
           for (word address = 0x0; address < 0x2000; address += 512) {  // 8K
             myFile.read(sdBuffer, 512);
             for (int x = 0; x < 512; x++) {
@@ -821,7 +788,7 @@ void writeRAM_MSX() {
               if (srambit6)
                 writeData_MSX(0x7000, 0xC0 + y);  // Bit 6 + Bit 7 Enable
               else
-                writeData_MSX(0x7000, 0xA0 + y);                            // Bit 5 + Bit 7 Enable
+                writeData_MSX(0x7000, 0xA0 + y);  // Bit 5 + Bit 7 Enable
               for (word address = 0x0; address < 0x2000; address += 512) {  // 8K
                 myFile.read(sdBuffer, 512);
                 for (int x = 0; x < 512; x++) {
@@ -833,9 +800,9 @@ void writeRAM_MSX() {
           writeData_MSX(0x7000, 0);  // SRAM Disable
           break;
 
-        case 11:                                                        // PAC/FM-PAC (8K)
-          writeData_MSX(0x5FFE, 0x4D);                                  // SRAM Enable Step 1
-          writeData_MSX(0x5FFF, 0x69);                                  // SRAM Enable Step 2
+        case 11:  // PAC/FM-PAC (8K)
+          writeData_MSX(0x5FFE, 0x4D);  // SRAM Enable Step 1
+          writeData_MSX(0x5FFF, 0x69);  // SRAM Enable Step 2
           for (word address = 0x0; address < 0x2000; address += 512) {  // 8K
             myFile.read(sdBuffer, 512);
             for (int x = 0; x < 512; x++) {
@@ -847,7 +814,7 @@ void writeRAM_MSX() {
       }
       myFile.close();
 
-      println_Msg(F(""));
+      println_Msg(FS(FSTRING_EMPTY));
       println_Msg(F("RAM FILE WRITTEN!"));
       display_Update();
 
@@ -862,115 +829,24 @@ void writeRAM_MSX() {
 //******************************************
 // MAPPER CODE
 //******************************************
-void setMapper_MSX() {
-#if (defined(enable_OLED) || defined(enable_LCD))
-  int b = 0;
-  int i = 0;
-// Check Button Status
-#if defined(enable_OLED)
-  buttonVal1 = (PIND & (1 << 7));  // PD7
-#elif defined(enable_LCD)
-  boolean buttonVal1 = (PING & (1 << 2));  //PG2
-#endif
-  if (buttonVal1 == LOW) {  // Button Pressed
-    while (1) {             // Scroll Mapper List
-#if defined(enable_OLED)
-      buttonVal1 = (PIND & (1 << 7));  // PD7
-#elif defined(enable_LCD)
-      buttonVal1 = (PING & (1 << 2));      //PG2
-#endif
-      if (buttonVal1 == HIGH) {  // Button Released
-        // Correct Overshoot
-        if (i == 0)
-          i = msxmapcount - 1;
-        else
-          i--;
-        break;
-      }
-      display_Clear();
-      print_Msg(F("Mapper: "));
-      msxindex = i * 5;
-      msxmapselect = pgm_read_byte(msxmapsize + msxindex);
-      println_Msg(msxmapselect);
-      printMapper(msxmapselect);
-      display_Update();
-      if (i == (msxmapcount - 1))
-        i = 0;
-      else
-        i++;
-      delay(250);
-    }
-  }
 
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
+void printMapperSelection_MSX(int index) {
   display_Clear();
-  print_Msg(F("Mapper: "));
-  msxindex = i * 5;
+  print_Msg(FS(FSTRING_MAPPER));
+  msxindex = index * 5;
   msxmapselect = pgm_read_byte(msxmapsize + msxindex);
   println_Msg(msxmapselect);
   printMapper(msxmapselect);
-  println_Msg(F(""));
-#if defined(enable_OLED)
-  print_STR(press_to_change_STR, 1);
-  print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-  print_STR(rotate_to_change_STR, 1);
-  print_STR(press_to_select_STR, 1);
+}
 #endif
-  display_Update();
 
-  while (1) {
-    b = checkButton();
-    if (b == 2) {  // Previous Mapper (doubleclick)
-      if (i == 0)
-        i = msxmapcount - 1;
-      else
-        i--;
+void setMapper_MSX() {
+  byte newmsxmapper;
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
+  navigateMenu(0, msxmapcount - 1, &printMapperSelection_MSX);
+  newmsxmapper = msxmapselect;
 
-      // Only update display after input because of slow LCD library
-      display_Clear();
-      print_Msg(F("Mapper: "));
-      msxindex = i * 5;
-      msxmapselect = pgm_read_byte(msxmapsize + msxindex);
-      println_Msg(msxmapselect);
-      printMapper(msxmapselect);
-      println_Msg(F(""));
-#if defined(enable_OLED)
-      print_STR(press_to_change_STR, 1);
-      print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-      print_STR(rotate_to_change_STR, 1);
-      print_STR(press_to_select_STR, 1);
-#endif
-      display_Update();
-    }
-    if (b == 1) {  // Next Mapper (press)
-      if (i == (msxmapcount - 1))
-        i = 0;
-      else
-        i++;
-
-      // Only update display after input because of slow LCD library
-      display_Clear();
-      print_Msg(F("Mapper: "));
-      msxindex = i * 5;
-      msxmapselect = pgm_read_byte(msxmapsize + msxindex);
-      println_Msg(msxmapselect);
-      printMapper(msxmapselect);
-      println_Msg(F(""));
-#if defined(enable_OLED)
-      print_STR(press_to_change_STR, 1);
-      print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-      print_STR(rotate_to_change_STR, 1);
-      print_STR(press_to_select_STR, 1);
-#endif
-      display_Update();
-    }
-    if (b == 3) {  // Long Press - Execute (hold)
-      newmsxmapper = msxmapselect;
-      break;
-    }
-  }
   display.setCursor(0, 56);
   print_Msg(F("MAPPER "));
   print_Msg(newmsxmapper);
@@ -982,7 +858,7 @@ setmapper:
   String newmap;
   msxmapfound = false;
   printMapper(0);
-  Serial.print(F("Enter Mapper [0-13]: "));
+  Serial.print(F("Enter Mapper [0-14]: "));
   while (Serial.available() == 0) {}
   newmap = Serial.readStringUntil('\n');
   Serial.println(newmap);
@@ -995,7 +871,7 @@ setmapper:
   }
   if (msxmapfound == false) {
     Serial.println(F("MAPPER NOT SUPPORTED!"));
-    Serial.println(F(""));
+    Serial.println(FS(FSTRING_EMPTY));
     newmsxmapper = 0;
     goto setmapper;
   }
@@ -1021,27 +897,27 @@ void checkMapperSize_MSX() {
 //******************************************
 // SET ROM SIZE
 //******************************************
+
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
+void printRomSize_MSX(uint8_t index) {
+  display_Clear();
+  print_Msg(FS(FSTRING_ROM_SIZE));
+  println_Msg(MSX[index]);
+}
+#endif
+
 void setROMSize_MSX() {
-#if (defined(enable_OLED) || defined(enable_LCD))
+  byte newmsxsize;
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
   display_Clear();
   if (msxlo == msxhi)
     newmsxsize = msxlo;
   else {
-    int b = 0;
+    uint8_t b = 0;
     int i = msxlo;
 
-    display_Clear();
-    print_Msg(F("ROM Size: "));
-    println_Msg(MSX[i]);
-    println_Msg(F(""));
-#if defined(enable_OLED)
-    print_STR(press_to_change_STR, 1);
-    print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-    print_STR(rotate_to_change_STR, 1);
-    print_STR(press_to_select_STR, 1);
-#endif
-    display_Update();
+    printRomSize_MSX(i);
+    printInstructions();
 
     while (1) {
       b = checkButton();
@@ -1058,18 +934,8 @@ void setROMSize_MSX() {
             i--;
 
           // Only update display after input because of slow LCD library
-          display_Clear();
-          print_Msg(F("ROM Size: "));
-          println_Msg(MSX[i]);
-          println_Msg(F(""));
-#if defined(enable_OLED)
-          print_STR(press_to_change_STR, 1);
-          print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-          print_STR(rotate_to_change_STR, 1);
-          print_STR(press_to_select_STR, 1);
-#endif
-          display_Update();
+          printRomSize_MSX(i);
+          printInstructions();
         }
       }
       if (b == 1) {             // Next (press)
@@ -1085,18 +951,8 @@ void setROMSize_MSX() {
             i++;
 
           // Only update display after input because of slow LCD library
-          display_Clear();
-          print_Msg(F("ROM Size: "));
-          println_Msg(MSX[i]);
-          println_Msg(F(""));
-#if defined(enable_OLED)
-          print_STR(press_to_change_STR, 1);
-          print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-          print_STR(rotate_to_change_STR, 1);
-          print_STR(press_to_select_STR, 1);
-#endif
-          display_Update();
+          printRomSize_MSX(i);
+          printInstructions();
         }
       }
       if (b == 3) {  // Long Press - Execute (hold)
@@ -1106,7 +962,7 @@ void setROMSize_MSX() {
     }
     display.setCursor(0, 56);  // Display selection at bottom
   }
-  print_Msg(F("ROM SIZE "));
+  print_Msg(FS(FSTRING_ROM_SIZE));
   if (msxmapper == 12)  // R-Type
     print_Msg(F("384"));
   else
@@ -1138,13 +994,13 @@ setrom:
     if (msxmapper == 11) {  // PAC/FM-PAC 0K/64K
       if ((newmsxromsize > 0) && (newmsxromsize < 4)) {
         Serial.println(F("SIZE NOT SUPPORTED"));
-        Serial.println(F(""));
+        Serial.println(FS(FSTRING_EMPTY));
         goto setrom;
       }
     }
     if (newmsxsize > msxhi) {
       Serial.println(F("SIZE NOT SUPPORTED"));
-      Serial.println(F(""));
+      Serial.println(FS(FSTRING_EMPTY));
       goto setrom;
     }
   }
@@ -1162,27 +1018,27 @@ setrom:
 //******************************************
 // SET RAM SIZE
 //******************************************
+
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
+void printRamSize_MSX(uint8_t index) {
+  display_Clear();
+  print_Msg(F("RAM Size: "));
+  println_Msg(MSXRAM[index]);
+}
+#endif
+
 void setRAMSize_MSX() {
-#if (defined(enable_OLED) || defined(enable_LCD))
+  byte newmsxramsize;
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
   display_Clear();
   if (msxramlo == msxramhi)
     newmsxramsize = msxramlo;
   else {
-    int b = 0;
+    uint8_t b = 0;
     int i = msxramlo;
 
-    display_Clear();
-    print_Msg(F("RAM Size: "));
-    println_Msg(MSXRAM[i]);
-    println_Msg(F(""));
-#if defined(enable_OLED)
-    print_STR(press_to_change_STR, 1);
-    print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-    print_STR(rotate_to_change_STR, 1);
-    print_STR(press_to_select_STR, 1);
-#endif
-    display_Update();
+    printRamSize_MSX(i);
+    printInstructions();
 
     while (1) {
       b = checkButton();
@@ -1199,18 +1055,8 @@ void setRAMSize_MSX() {
             i--;
 
           // Only update display after input because of slow LCD library
-          display_Clear();
-          print_Msg(F("RAM Size: "));
-          println_Msg(MSXRAM[i]);
-          println_Msg(F(""));
-#if defined(enable_OLED)
-          print_STR(press_to_change_STR, 1);
-          print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-          print_STR(rotate_to_change_STR, 1);
-          print_STR(press_to_select_STR, 1);
-#endif
-          display_Update();
+          printRamSize_MSX(i);
+          printInstructions();
         }
       }
       if (b == 1) {            // Next (press)
@@ -1226,18 +1072,8 @@ void setRAMSize_MSX() {
             i++;
 
           // Only update display after input because of slow LCD library
-          display_Clear();
-          print_Msg(F("RAM Size: "));
-          println_Msg(MSXRAM[i]);
-          println_Msg(F(""));
-#if defined(enable_OLED)
-          print_STR(press_to_change_STR, 1);
-          print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-          print_STR(rotate_to_change_STR, 1);
-          print_STR(press_to_select_STR, 1);
-#endif
-          display_Update();
+          printRamSize_MSX(i);
+          printInstructions();
         }
       }
       if (b == 3) {  // Long Press - Execute (hold)
@@ -1273,13 +1109,13 @@ setram:
     if (msxmapper == 7) {        // Koei 8K/32K
       if (newmsxramsize == 3) {  // 16K
         Serial.println(F("SIZE NOT SUPPORTED"));
-        Serial.println(F(""));
+        Serial.println(FS(FSTRING_EMPTY));
         goto setram;
       }
     }
     if (newmsxramsize > msxramhi) {
       Serial.println(F("SIZE NOT SUPPORTED"));
-      Serial.println(F(""));
+      Serial.println(FS(FSTRING_EMPTY));
       goto setram;
     }
   }
@@ -1298,7 +1134,7 @@ void checkStatus_MSX() {
   EEPROM_readAnything(7, msxmapper);
   EEPROM_readAnything(8, msxsize);
   EEPROM_readAnything(10, msxramsize);
-  if (msxmapper > 13) {
+  if (msxmapper > 14) {
     msxmapper = 0;
     EEPROM_writeAnything(7, msxmapper);
   }
@@ -1311,15 +1147,15 @@ void checkStatus_MSX() {
     EEPROM_writeAnything(10, msxramsize);
   }
 
-#if (defined(enable_OLED) || defined(enable_LCD))
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
   display_Clear();
   println_Msg(F("MSX READER"));
-  println_Msg(F("CURRENT SETTINGS"));
-  println_Msg(F(""));
+  println_Msg(FS(FSTRING_CURRENT_SETTINGS));
+  println_Msg(FS(FSTRING_EMPTY));
   print_Msg(F("MAPPER:   "));
   println_Msg(msxmapper);
   printMapper(msxmapper);
-  print_Msg(F("ROM SIZE: "));
+  print_Msg(FS(FSTRING_ROM_SIZE));
   if (msxmapper == 12)  // R-Type
     print_Msg(F("384"));
   else
@@ -1342,12 +1178,12 @@ void checkStatus_MSX() {
   Serial.print(F("CURRENT RAM SIZE: "));
   Serial.print(MSXRAM[msxramsize]);
   Serial.println(F("K"));
-  Serial.println(F(""));
+  Serial.println(FS(FSTRING_EMPTY));
 #endif
 }
 
 void printMapper(byte msxmaplabel) {
-#if (defined(enable_OLED) || defined(enable_LCD))
+#if (defined(ENABLE_OLED) || defined(ENABLE_LCD))
   switch (msxmaplabel) {
     case 0:
       println_Msg(F("NONE"));
@@ -1391,6 +1227,9 @@ void printMapper(byte msxmaplabel) {
     case 13:
       println_Msg(F("SUPER LODE RUNNER"));
       break;
+    case 14:
+      println_Msg(F("HUDSON SOFT BEE PACK"));
+      break;
   }
 #else
   Serial.println(F("0 = NONE"));
@@ -1407,261 +1246,60 @@ void printMapper(byte msxmaplabel) {
   Serial.println(F("11 = PAC/FM-PAC"));
   Serial.println(F("12 = R-TYPE"));
   Serial.println(F("13 = SUPER LODE RUNNER"));
+  Serial.println(F("14 = HUDSON SOFT BEE PACK"));
 #endif
 }
 
 //******************************************
 // CART SELECT CODE
 //******************************************
-FsFile msxcsvFile;
-char msxgame[31];                   // title
-char msxmm[3];                      // mapper
-char msxrr[3];                      // romsize
-char msxss[3];                      // ramsize
-char msxll[4];                      // linelength (previous line)
-unsigned long msxcsvpos;            // CSV File Position
-char msxcartCSV[] = "msxcart.txt";  // CSV List
-char msxcsvEND[] = "EOF";           // CSV End Marker for scrolling
+struct database_entry_MSX {
+  byte gameMapper;
+  byte gameSize;
+  byte ramSize;
+};
 
-bool readLine_MSX(FsFile& f, char* line, size_t maxLen) {
-  for (size_t n = 0; n < maxLen; n++) {
-    int c = f.read();
-    if (c < 0 && n == 0) return false;  // EOF
-    if (c < 0 || c == '\n') {
-      line[n] = 0;
-      return true;
-    }
-    line[n] = c;
-  }
-  return false;  // line too long
-}
+void readDataLine_MSX(FsFile& database, void* entry) {
+  database_entry_MSX* castEntry = (database_entry_MSX*)entry;
+  // Read mapper
+  castEntry->gameMapper = ((database.read() - 48) * 10) + (database.read() - 48);
 
-bool readVals_MSX(char* msxgame, char* msxmm, char* msxrr, char* msxss, char* msxll) {
-  char line[41];
-  msxcsvpos = msxcsvFile.position();
-  if (!readLine_MSX(msxcsvFile, line, sizeof(line))) {
-    return false;  // EOF or too long
-  }
-  char* comma = strtok(line, ",");
-  int x = 0;
-  while (comma != NULL) {
-    if (x == 0)
-      strcpy(msxgame, comma);
-    else if (x == 1)
-      strcpy(msxmm, comma);
-    else if (x == 2)
-      strcpy(msxrr, comma);
-    else if (x == 3)
-      strcpy(msxss, comma);
-    else if (x == 4)
-      strcpy(msxll, comma);
-    comma = strtok(NULL, ",");
-    x += 1;
-  }
-  return true;
-}
+  // Skip over semicolon
+  database.seekCur(1);
 
-bool getCartListInfo_MSX() {
-  bool buttonreleased = 0;
-  bool cartselected = 0;
-#if (defined(enable_OLED) || defined(enable_LCD))
-  display_Clear();
-  println_Msg(F(" HOLD TO FAST CYCLE"));
-  display_Update();
-#else
-  Serial.println(F("HOLD BUTTON TO FAST CYCLE"));
-#endif
-  delay(2000);
-#if defined(enable_OLED)
-  buttonVal1 = (PIND & (1 << 7));  // PD7
-#elif defined(enable_LCD)
-  boolean buttonVal1 = (PING & (1 << 2));  //PG2
-#endif
-  if (buttonVal1 == LOW) {  // Button Held - Fast Cycle
-    while (1) {             // Scroll Game List
-      while (readVals_MSX(msxgame, msxmm, msxrr, msxss, msxll)) {
-        if (strcmp(msxcsvEND, msxgame) == 0) {
-          msxcsvFile.seek(0);  // Restart
-        } else {
-#if (defined(enable_OLED) || defined(enable_LCD))
-          display_Clear();
-          println_Msg(F("CART TITLE:"));
-          println_Msg(F(""));
-          println_Msg(msxgame);
-          display_Update();
-#else
-          Serial.print(F("CART TITLE:"));
-          Serial.println(msxgame);
-#endif
-#if defined(enable_OLED)
-          buttonVal1 = (PIND & (1 << 7));  // PD7
-#elif defined(enable_LCD)
-          buttonVal1 = (PING & (1 << 2));  //PG2
-#endif
-          if (buttonVal1 == HIGH) {  // Button Released
-            buttonreleased = 1;
-            break;
-          }
-          if (buttonreleased) {
-            buttonreleased = 0;  // Reset Flag
-            break;
-          }
-        }
-      }
-#if defined(enable_OLED)
-      buttonVal1 = (PIND & (1 << 7));  // PD7
-#elif defined(enable_LCD)
-      buttonVal1 = (PING & (1 << 2));      //PG2
-#endif
-      if (buttonVal1 == HIGH)  // Button Released
-        break;
-    }
-  }
-#if (defined(enable_OLED) || defined(enable_LCD))
-  display.setCursor(0, 56);
-  println_Msg(F("FAST CYCLE OFF"));
-  display_Update();
-#else
-  Serial.println(F(""));
-  Serial.println(F("FAST CYCLE OFF"));
-  Serial.println(F("PRESS BUTTON TO STEP FORWARD"));
-  Serial.println(F("DOUBLE CLICK TO STEP BACK"));
-  Serial.println(F("HOLD TO SELECT"));
-  Serial.println(F(""));
-#endif
-  while (readVals_MSX(msxgame, msxmm, msxrr, msxss, msxll)) {
-    if (strcmp(msxcsvEND, msxgame) == 0) {
-      msxcsvFile.seek(0);  // Restart
-    } else {
-#if (defined(enable_OLED) || defined(enable_LCD))
-      display_Clear();
-      println_Msg(F("CART TITLE:"));
-      println_Msg(F(""));
-      println_Msg(msxgame);
-      display.setCursor(0, 48);
-#if defined(enable_OLED)
-      print_STR(press_to_change_STR, 1);
-      print_STR(right_to_select_STR, 1);
-#elif defined(enable_LCD)
-      print_STR(rotate_to_change_STR, 1);
-      print_STR(press_to_select_STR, 1);
-#endif
-      display_Update();
-#else
-      Serial.print(F("CART TITLE:"));
-      Serial.println(msxgame);
-#endif
-      while (1) {  // Single Step
-        int b = checkButton();
-        if (b == 1) {  // Continue (press)
-          break;
-        }
-        if (b == 2) {  // Reset to Start of List (doubleclick)
-          byte prevline = strtol(msxll, NULL, 10);
-          msxcsvpos -= prevline;
-          msxcsvFile.seek(msxcsvpos);
-          break;
-        }
-        if (b == 3) {  // Long Press - Select Cart (hold)
-          newmsxmapper = strtol(msxmm, NULL, 10);
-          newmsxsize = strtol(msxrr, NULL, 10);
-          newmsxramsize = strtol(msxss, NULL, 10);
-          EEPROM_writeAnything(7, newmsxmapper);
-          EEPROM_writeAnything(8, newmsxsize);
-          EEPROM_writeAnything(10, newmsxramsize);
-          cartselected = 1;  // SELECTION MADE
-#if (defined(enable_OLED) || defined(enable_LCD))
-          println_Msg(F("SELECTION MADE"));
-          display_Update();
-#else
-          Serial.println(F("SELECTION MADE"));
-#endif
-          break;
-        }
-      }
-      if (cartselected) {
-        cartselected = 0;  // Reset Flag
-        return true;
-      }
-    }
-  }
-#if (defined(enable_OLED) || defined(enable_LCD))
-  println_Msg(F(""));
-  println_Msg(F("END OF FILE"));
-  display_Update();
-#else
-  Serial.println(F("END OF FILE"));
-#endif
+  // Read rom size
+  castEntry->gameSize = database.read() - 48;
 
-  return false;
-}
+  // Skip over semicolon
+  database.seekCur(1);
 
-void checkCSV_MSX() {
-  if (getCartListInfo_MSX()) {
-#if (defined(enable_OLED) || defined(enable_LCD))
-    display_Clear();
-    println_Msg(F("CART SELECTED"));
-    println_Msg(F(""));
-    println_Msg(msxgame);
-    display_Update();
-    // Display Settings
-    display.setCursor(0, 56);
-    print_Msg(F("CODE: M"));
-    print_Msg(newmsxmapper);
-    print_Msg(F("/R"));
-    print_Msg(newmsxsize);
-    print_Msg(F("/S"));
-    println_Msg(newmsxramsize);
-    display_Update();
-#else
-    Serial.println(F(""));
-    Serial.println(F("CART SELECTED"));
-    Serial.println(msxgame);
-    // Display Settings
-    Serial.print(F("CODE: M"));
-    Serial.print(newmsxmapper);
-    Serial.print(F("/R"));
-    Serial.print(newmsxsize);
-    Serial.print(F("/S"));
-    Serial.println(newmsxramsize);
-    Serial.println(F(""));
-#endif
-  } else {
-#if (defined(enable_OLED) || defined(enable_LCD))
-    display.setCursor(0, 56);
-    println_Msg(F("NO SELECTION"));
-    display_Update();
-#else
-    Serial.println(F("NO SELECTION"));
-#endif
-  }
+  // Read ram size
+  castEntry->ramSize = database.read() - 48;
+
+  // Skip rest of line
+  database.seekCur(2);
 }
 
 void setCart_MSX() {
-#if (defined(enable_OLED) || defined(enable_LCD))
-  display_Clear();
-  println_Msg(msxcartCSV);
-  display_Update();
-#endif
+  //go to root
   sd.chdir();
-  sprintf(folder, "MSX/CSV");
-  sd.chdir(folder);  // Switch Folder
-  msxcsvFile = sd.open(msxcartCSV, O_READ);
-  if (!msxcsvFile) {
-#if (defined(enable_OLED) || defined(enable_LCD))
-    display_Clear();
-    println_Msg(F("CSV FILE NOT FOUND!"));
-    display_Update();
-#else
-    Serial.println(F("CSV FILE NOT FOUND!"));
-#endif
-    while (1) {
-      if (checkButton() != 0)
-        setup_MSX();
-    }
-  }
-  checkCSV_MSX();
 
-  msxcsvFile.close();
+  struct database_entry_MSX entry;
+
+  // Select starting letter
+  byte myLetter = starting_letter();
+
+  // Open database
+  if (myFile.open("msxcart.txt", O_READ)) {
+    seek_first_letter_in_database(myFile, myLetter);
+
+    if (checkCartSelection(myFile, &readDataLine_MSX, &entry)) {
+      EEPROM_writeAnything(7, entry.gameMapper);
+      EEPROM_writeAnything(8, entry.gameSize);
+      EEPROM_writeAnything(10, entry.ramSize);
+    }
+  } else {
+    print_FatalError(FS(FSTRING_DATABASE_FILE_NOT_FOUND));
+  }
 }
 #endif

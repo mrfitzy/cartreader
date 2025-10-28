@@ -1,7 +1,7 @@
 /******************************************
   SUPER FAMICOM SUFAMI TURBO MODULE
 ******************************************/
-#ifdef enable_ST
+#if (defined(ENABLE_ST) && defined(ENABLE_SNES))
 
 /******************************************
   Menu
@@ -9,7 +9,7 @@
 // Sufami Turbo menu items
 static const char stMenuItem1[] PROGMEM = "Read cart in Slot A";
 static const char stMenuItem2[] PROGMEM = "Read cart in Slot B";
-static const char* const menuOptionsST[] PROGMEM = { stMenuItem1, stMenuItem2, string_reset2 };
+static const char* const menuOptionsST[] PROGMEM = { stMenuItem1, stMenuItem2, FSTRING_RESET };
 
 void stMenu() {
   // Create ST menu with title and 3 options to choose from
@@ -123,10 +123,10 @@ bool getHeader(unsigned int bank) {
 
   // Check if 'BANDAI' header is present
   if (strncmp(romName, "BANDAI SFC-ADX", 14) == 0)
-    return(1);
+    return (1);
   else
-    return(0);
-} 
+    return (0);
+}
 
 // Select the slot to use and detect cart size
 void readSlot(bool cartSlot) {
@@ -136,12 +136,12 @@ void readSlot(bool cartSlot) {
   sd.chdir("/");
   display_Clear();
 
-  if(!cartSlot) {            // Slot A was selected
+  if (!cartSlot) {           // Slot A was selected
     if (getHeader(32)) {     // Look for a cart in slot A
       if (getHeader(48))     // Look for mirrored data in slot A
-        readRom_ST(32,48);   // Dump 512KB cart
-      else                   
-        readRom_ST(32,64);   // Dump 1MB cart
+        readRom_ST(32, 48);  // Dump 512KB cart
+      else
+        readRom_ST(32, 64);  // Dump 1MB cart
     }
     else {
       println_Msg(F("No cart detected in Slot A"));
@@ -152,9 +152,9 @@ void readSlot(bool cartSlot) {
   else {                      // Slot B was selected
     if (getHeader(64)) {      // Look for a cart in slot B
       if (getHeader(80))      // Look for mirrored data in slot B
-        readRom_ST(64,80);    // Dump 512KB cart
+        readRom_ST(64, 80);   // Dump 512KB cart
       else
-        readRom_ST(64,96);    // Dump 1MB cart
+        readRom_ST(64, 96);   // Dump 1MB cart
     }
     else {
       println_Msg(F("No cart detected in Slot B"));
@@ -167,26 +167,7 @@ void readSlot(bool cartSlot) {
 // Read ST rom to SD card
 void readRom_ST(unsigned int bankStart, unsigned int bankEnd) {
   // create a new folder to save rom file
-  EEPROM_readAnything(0, foldern);
-  strcpy(fileName, "SUFAMI_TURBO.st");
-  sprintf(folder, "ST/%s/%d", romName, foldern);
-  sd.mkdir(folder, true);
-  sd.chdir(folder);
-
-  display_Clear();
-  print_STR(saving_to_STR, 0);
-  print_Msg(folder);
-  println_Msg(F("/..."));
-  display_Update();
-
-  // write new folder number back to eeprom
-  foldern++;
-  EEPROM_writeAnything(0, foldern);
-
-  //open file on sd card
-  if (!myFile.open(fileName, O_RDWR | O_CREAT)) {
-    print_FatalError(create_file_STR);
-  }
+  createFolderAndOpenFile("ST", "ROM", "SUFAMI_TURBO", "st");
 
   // Read specified banks
   readLoRomBanks(bankStart + 0x80, bankEnd + 0x80, &myFile);
@@ -194,6 +175,10 @@ void readRom_ST(unsigned int bankStart, unsigned int bankEnd) {
   // Close file:
   myFile.close();
 
+  // Compare dump CRC with db values
+  compareCRC("st.txt", 0, 1, 0);
+
+  println_Msg(FS(FSTRING_EMPTY));
   print_STR(press_button_STR, 1);
   display_Update();
   wait();

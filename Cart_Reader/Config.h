@@ -61,7 +61,7 @@
     type later in this file.
 */
 
-//#define ENABLE_RTC
+#define ENABLE_RTC
 
 /****/
 
@@ -181,7 +181,7 @@
 /* [ Flash Repros (all systems, SNES repro also needs FLASH8)------ ]
 */
 
-//#define ENABLE_FLASH 
+#define ENABLE_FLASH
 
 /****/
 
@@ -224,15 +224,15 @@
 /* [ Nintendo 64 -------------------------------------------------- ]
 */
 
-//#define ENABLE_N64
-//#define ENABLE_CONTROLLERTEST
+#define ENABLE_N64
+#define ENABLE_CONTROLLERTEST
 
 /****/
 
 /* [ Nintendo Entertainment System/Family Computer ---------------- ]
 */
 
-//#define ENABLE_NES
+#define ENABLE_NES
 
 /****/
 
@@ -274,7 +274,7 @@
 /* [ Sega Master System/Mark III/Game Gear/SG-1000 ---------------- ]
 */
 
-//#define ENABLE_SMS
+#define ENABLE_SMS
 
 /****/
 

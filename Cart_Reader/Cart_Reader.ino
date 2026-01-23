@@ -1118,7 +1118,8 @@ constexpr char modeItem40[] PROGMEM = "Vtech V.Smile (3V)";
 constexpr char modeItem41[] PROGMEM = "Flashrom Programmer";
 constexpr char modeItem42[] PROGMEM = "CP System III";
 constexpr char modeItem43[] PROGMEM = "Self Test (3V)";
-constexpr char modeItem44[] PROGMEM = "About";
+constexpr char modeItem44[] PROGMEM = "Browse SD Card";
+constexpr char modeItem45[] PROGMEM = "About";
 
 static const char* const modeOptions[] PROGMEM = {
 #ifdef ENABLE_GBX
@@ -1250,7 +1251,8 @@ static const char* const modeOptions[] PROGMEM = {
 #ifdef ENABLE_SELFTEST
   modeItem43,
 #endif
-  modeItem44, FSTRING_RESET
+  modeItem44,
+  modeItem45, FSTRING_RESET
 
 };
 
@@ -1579,6 +1581,10 @@ void mainMenu() {
       break;
 #endif
 
+    case SYSTEM_MENU_BROWSE:
+      return browseSDCard();
+      break;
+
     case SYSTEM_MENU_ABOUT:
       return aboutScreen();
       break;
@@ -1751,6 +1757,15 @@ void selfTest() {
   resetArduino();
 }
 #endif
+
+void browseSDCard() {
+  display_Clear();
+  fileBrowser(FS(FSTRING_SELECT_FILE));
+  print_STR(press_button_STR, 1);
+  display_Update();
+  wait();
+  resetArduino();
+}
 
 /******************************************
   About Screen
